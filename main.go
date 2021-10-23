@@ -1,44 +1,62 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
+	"log"
+	"os"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/joho/godotenv"
 )
 
-type GetMeT struct {
-	Ok     bool         `json: "ok"`
-	Result GetMeResultT `json: "result"`
-}
-
-type GetMeResultT struct {
-	Id        int64  `json: "id"`
-	isBot     bool   `json: "is_bot"`
-	FirstName string `json: "first_name"`
-	Username  string `json: "username"`
-}
-
 func main() {
-	getMeJson := `{
-		"ok": true,
-    	"result": {
-			"id": 1164460711,
-			"is_bot": true,
-			"first_name": "Matrix",
-			"username": "ShroudedAkaliBot",
-			"can_join_groups": true,
-			"can_read_all_group_messages": false,
-			"supports_inline_queries": false
-		}
-	}`
-
-	getMe := GetMeT{}
-
-	err := json.Unmarshal([]byte(getMeJson), &getMe)
+	err := godotenv.Load()
 	if err != nil {
-		fmt.Println(err.Error())
-
-		return
+		log.Fatal(fmt.Errorf("error loading .env file: %v", err))
 	}
 
-	fmt.Println(getMe)
+	bot, err := tgbotapi.NewBotAPI(os.Getenv("TELEGRAM_APITOKEN"))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	bot.Debug = true
+
+	log.Printf("Authorized on account %s", bot.Self.UserName)
+
+	updateConfig := tgbotapi.NewUpdate(0)
+	updateConfig.Timeout = 60
+
+	updates := bot.GetUpdatesChan(updateConfig)
+
+	for update := range updates {
+		if update.Message == nil { // ignore any non-Message updates
+			continue
+		}
+
+		if !update.Message.IsCommand() { // ignore any non-command Messages
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, update.Message.Text)
+			msg.ReplyToMessageID = update.Message.MessageID
+			if _, err := bot.Send(msg); err != nil {
+				log.Printf("error on sending message: %v", err)
+			}
+		} else {
+			msg := tgbotapi.NewMessage(update.Message.Chat.ID, "")
+
+			switch update.Message.Command() {
+			case "help":
+				msg.Text = "I understand /sayhi and /status."
+			case "sayhi":
+				msg.Text = "Hi :)"
+			case "status":
+				msg.Text = "I'm ok."
+			default:
+				msg.Text = "I don't know that command"
+			}
+
+			if _, err := bot.Send(msg); err != nil {
+				log.Printf("error on sending message: %v", err)
+			}
+		}
+	}
 }
